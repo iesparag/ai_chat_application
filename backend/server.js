@@ -22,7 +22,8 @@ const io = require('socket.io')(server, {
 // Configure CORS
 const allowedOrigins = [
   'http://localhost:4200',  // Local development
-  'https://ai-chat-app-parag.netlify.app'  // Production frontend URL (update this)
+  'https://ai-chat-app-parag.netlify.app', // Production frontend URL (update this)
+  'https://ies-parag-gpt.netlify.app'
 ];
 
 app.use(cors({
