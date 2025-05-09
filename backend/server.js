@@ -19,10 +19,24 @@ const io = require('socket.io')(server, {
   }
 });
 
+// Configure CORS
+const allowedOrigins = [
+  'http://localhost:4200',  // Local development
+  'https://ai-chat-app-parag.netlify.app'  // Production frontend URL (update this)
+];
+
 app.use(cors({
-  origin: 'http://localhost:4200',
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error('The CORS policy for this site does not allow access from the specified Origin.'), false);
+    }
+    return callback(null, true);
+  },
   credentials: true
 }));
+
 app.use(express.json());
 
 // Request logging middleware
