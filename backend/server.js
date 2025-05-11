@@ -4,7 +4,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { Configuration, OpenAIApi } = require('openai');
+const OpenAI = require('openai');
 
 const User = require('./models/user');
 const Chat = require('./models/chat');
@@ -59,11 +59,9 @@ if (!process.env.OPENAI_API_KEY) {
   process.exit(1);
 }
 
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
-
-const openai = new OpenAIApi(configuration);
 
 // Test OpenAI connection
 async function testOpenAIConnection() {
@@ -215,7 +213,7 @@ io.on('connection', (socket) => {
       try {
         console.log('Sending request to OpenAI...');
         // Get AI response
-        const completion = await openai.createChatCompletion({
+        const completion = await openai.chat.completions.create({
           model: 'gpt-3.5-turbo',
           messages: [
             ...chat.messages.map(msg => ({
@@ -227,11 +225,11 @@ io.on('connection', (socket) => {
           max_tokens: 1000,
         });
 
-        if (!completion.data || !completion.data.choices || !completion.data.choices[0]) {
+        if (!completion.choices || !completion.choices[0]) {
           throw new Error('Invalid response from OpenAI');
         }
 
-        const aiResponse = completion.data.choices[0].message.content;
+        const aiResponse = completion.choices[0].message.content;
         console.log('AI Response:', aiResponse);
 
         // Save AI response

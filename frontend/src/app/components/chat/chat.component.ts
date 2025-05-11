@@ -69,7 +69,7 @@ import { ChatService } from '../../services/chat.service';
                    #messageInput
                    cdkTextareaAutosize
                    cdkAutosizeMinRows="1"
-                   cdkAutosizeMaxRows="8">
+                   cdkAutosizeMaxRows="8"></textarea>
           </mat-form-field>
           <button mat-icon-button 
                   [class.active]="newMessage.trim()"
