@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { TextFieldModule } from '@angular/cdk/text-field';
 import { Chat, ChatMessage } from '../../services/chat.service';
 import { ChatService } from '../../services/chat.service';
 
@@ -17,7 +18,8 @@ import { ChatService } from '../../services/chat.service';
     MatButtonModule,
     MatInputModule,
     MatFormFieldModule,
-    MatIconModule
+    MatIconModule,
+    TextFieldModule
   ],
   template: `
     <div class="chat-container">
@@ -58,11 +60,16 @@ import { ChatService } from '../../services/chat.service';
       <div class="input-area" (click)="$event.stopPropagation()">
         <div class="input-wrapper">
           <mat-form-field appearance="outline">
-            <input matInput 
+            <textarea matInput 
                    [(ngModel)]="newMessage" 
-                   (keyup.enter)="sendMessage()"
+                   (keydown)="handleKeyDown($event)"
                    placeholder="Type a message..."
-                   [style.caretColor]="'white'">
+                   [style.caretColor]="'white'"
+                   [rows]="1"
+                   #messageInput
+                   cdkTextareaAutosize
+                   cdkAutosizeMinRows="1"
+                   cdkAutosizeMaxRows="8">
           </mat-form-field>
           <button mat-icon-button 
                   [class.active]="newMessage.trim()"
@@ -282,10 +289,22 @@ import { ChatService } from '../../services/chat.service';
       --mdc-outlined-text-field-outline-color: transparent;
     }
 
-    input.mat-mdc-input-element {
+    textarea.mat-mdc-input-element {
       color: white !important;
       font-size: 1rem !important;
       line-height: 1.5 !important;
+      resize: none !important;
+      overflow: hidden !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    ::ng-deep .mat-mdc-form-field-flex {
+      align-items: center !important;
+    }
+
+    ::ng-deep .mat-mdc-form-field-infix {
+      padding: 8px 0 !important;
     }
 
     button[mat-icon-button] {
@@ -377,6 +396,7 @@ import { ChatService } from '../../services/chat.service';
 })
 export class ChatComponent implements OnInit, AfterViewChecked {
   @ViewChild('messagesContainer') private messagesContainer!: ElementRef;
+  @ViewChild('messageInput') private messageInput!: ElementRef;
   currentChat: Chat | null = null;
   newMessage = '';
   errorMessage: string | null = null;
@@ -423,5 +443,20 @@ export class ChatComponent implements OnInit, AfterViewChecked {
   sendExample(message: string) {
     this.newMessage = message;
     this.sendMessage();
+  }
+
+  handleKeyDown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      // Send message on Enter without Ctrl
+      if (!event.ctrlKey && !event.shiftKey) {
+        event.preventDefault();
+        this.sendMessage();
+      }
+      // Add new line on Ctrl+Enter or Shift+Enter
+      else {
+        // Let the default behavior happen (new line)
+        return;
+      }
+    }
   }
 }
