@@ -97,6 +97,7 @@ import { AuthService } from './services/auth.service';
         max-width: 300px;
         transform: translateX(-100%);
         box-shadow: 2px 0 12px rgba(0,0,0,0.3);
+        z-index: 1002; /* Higher than input area */
       }
 
       .sidebar.open {
@@ -111,7 +112,7 @@ import { AuthService } from './services/auth.service';
 
       .sidebar-overlay {
         display: block;
-        z-index: 999;
+        z-index: 1000; /* Lower than input area but higher than other content */
       }
 
       .sidebar-overlay.visible {

@@ -55,7 +55,7 @@ import { ChatService } from '../../services/chat.service';
       </div>
 
       <!-- Input area -->
-      <div class="input-area">
+      <div class="input-area" (click)="$event.stopPropagation()">
         <div class="input-wrapper">
           <mat-form-field appearance="outline">
             <input matInput 
@@ -237,11 +237,12 @@ import { ChatService } from '../../services/chat.service';
     }
 
     .input-area {
-      padding: 1rem 1rem 1.5rem;
+      padding: 1rem;
+      position: sticky;
+      bottom: 0;
       background-color: #343541;
-      position: relative;
-      width: 100%;
-      margin: 0 auto;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      z-index: 1001;
     }
 
     .input-wrapper {
