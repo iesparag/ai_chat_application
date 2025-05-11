@@ -12,30 +12,26 @@ const auth = require('./middleware/auth');
 
 const app = express();
 const server = require('http').createServer(app);
-const io = require('socket.io')(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
-});
-
-// Configure CORS
 const allowedOrigins = [
   'http://localhost:4200',  // Local development
-  'https://ai-chat-app-parag.netlify.app', // Production frontend URL (update this)
+  'https://ai-chat-app-parag.netlify.app', // Production frontend URL
   'https://ies-parag-gpt.netlify.app'
 ];
 
+const io = require('socket.io')(server, {
+  cors: {
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
+// Configure CORS - must be before any routes
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error('The CORS policy for this site does not allow access from the specified Origin.'), false);
-    }
-    return callback(null, true);
-  },
-  credentials: true
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
