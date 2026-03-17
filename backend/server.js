@@ -69,9 +69,9 @@ async function testOpenAIConnection() {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error('OpenAI API key is not set');
     }
-    if (!process.env.OPENAI_API_KEY.startsWith('sk-') || process.env.OPENAI_API_KEY.startsWith('sk-proj-')) {
-      throw new Error('Invalid OpenAI API key format. Key should start with "sk-" but not "sk-proj-"');
-    }
+    // if (!process.env.OPENAI_API_KEY.startsWith('sk-') || process.env.OPENAI_API_KEY.startsWith('sk-proj-')) {
+    //   throw new Error('Invalid OpenAI API key format. Key should start with "sk-" but not "sk-proj-"');
+    // }
     const completion = await openai.chat.completions.create({
       messages: [{ role: "user", content: "Hello!" }],
       model: "gpt-3.5-turbo",
@@ -175,6 +175,7 @@ io.on('connection', (socket) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       userId = decoded.userId;
+      console.log('Authenticated user:', userId);
       socket.join(userId); // Join a room specific to this user
     } catch (error) {
       socket.emit('error', { message: 'Authentication failed' });
@@ -183,7 +184,14 @@ io.on('connection', (socket) => {
 
   socket.on('message', async ({ chatId, message }) => {
     try {
-      console.log('Received message:', { chatId, message });
+      // Extract content - client sends { content, timestamp }; ensure we always get a string
+      const raw = typeof message === 'string' ? message : message?.content;
+      const content = typeof raw === 'string' ? raw : '';
+      if (!content || !content.trim()) {
+        socket.emit('error', { message: 'Message content is required.' });
+        return;
+      }
+      console.log('Received message:', { chatId, content });
       
       if (!userId) {
         throw new Error('Not authenticated');
@@ -197,7 +205,7 @@ io.on('connection', (socket) => {
 
       // Add user message
       chat.messages.push({
-        content: message,
+        content,
         role: 'user'
       });
 
@@ -205,7 +213,7 @@ io.on('connection', (socket) => {
       socket.emit('message', {
         chatId,
         message: {
-          content: message,
+          content,
           role: 'user'
         }
       });
@@ -240,7 +248,7 @@ io.on('connection', (socket) => {
 
         // Update chat title if it's the first message
         if (chat.messages.length === 2) {
-          chat.title = message.slice(0, 30) + (message.length > 30 ? '...' : '');
+          chat.title = content.slice(0, 30) + (content.length > 30 ? '...' : '');
         }
 
         await chat.save();

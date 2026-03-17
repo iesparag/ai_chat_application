@@ -34,7 +34,9 @@ export class ChatService {
     private http: HttpClient,
     private authService: AuthService
   ) {
-    this.socket = io('http://localhost:3000');
+    // Socket connects to same host as API (apiUrl without /api)
+    const socketUrl = environment.apiUrl.replace(/\/api\/?$/, '');
+    this.socket = io(socketUrl);
     this.setupSocketAuthentication();
     this.loadChats();
 
@@ -49,15 +51,19 @@ export class ChatService {
         return;
       }
 
+      // Extract content safely - backend sends { content, role }
+      const textContent = typeof message?.content === 'string' ? message.content : '';
+      const role = message?.role === 'user' || message?.role === 'assistant' ? message.role : 'assistant';
+
       // Only update if it's the current chat and message doesn't exist
-      if (currentChat._id === chatId && 
+      if (currentChat._id === chatId && textContent &&
           !currentChat.messages?.some(m => 
-            m.content === message.content && 
-            m.role === message.role && 
-            Math.abs(new Date(m.timestamp).getTime() - new Date().getTime()) < 1000
+            this.getDisplayContent(m) === textContent && 
+            m.role === role && 
+            Math.abs(new Date(m.timestamp || 0).getTime() - new Date().getTime()) < 2000
           )
       ) {
-        this.updateChatWithMessage(chatId, message.content, message.role);
+        this.updateChatWithMessage(chatId, textContent, role);
       } else {
         console.log('Skipping duplicate message');
       }
@@ -70,8 +76,24 @@ export class ChatService {
   }
 
   private setupSocketAuthentication() {
-    this.authService.getToken().subscribe(token => {
+    const authenticate = () => {
+      const token = localStorage.getItem('token');
       if (token) {
+        this.socket.emit('authenticate', token);
+      }
+    };
+
+    // Re-authenticate whenever socket connects (including reconnection)
+    this.socket.on('connect', authenticate);
+
+    // Authenticate immediately if already connected (e.g. fast initial connection)
+    if (this.socket.connected) {
+      authenticate();
+    }
+
+    // Also authenticate when token changes (e.g. after login)
+    this.authService.getToken().subscribe(token => {
+      if (token && this.socket.connected) {
         this.socket.emit('authenticate', token);
       }
     });
@@ -194,5 +216,16 @@ export class ChatService {
 
   getSocket(): Socket {
     return this.socket;
+  }
+
+  /** Safely get displayable string from message content (handles old DB records with [object Object]) */
+  getDisplayContent(msg: { content?: unknown }): string {
+    if (typeof msg?.content === 'string') {
+      // Filter out malformed content from old buggy DB records
+      if (msg.content === '[object Object]') return 'Unable to display message';
+      return msg.content;
+    }
+    if (msg?.content && typeof msg.content === 'object') return 'Unable to display message';
+    return String(msg?.content ?? '');
   }
 }
