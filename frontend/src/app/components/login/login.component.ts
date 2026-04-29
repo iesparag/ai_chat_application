@@ -1,11 +1,13 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, NgForm } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
@@ -17,7 +19,8 @@ import { AuthService } from '../../services/auth.service';
     MatCardModule,
     MatFormFieldModule,
     MatInputModule,
-    MatButtonModule
+    MatButtonModule,
+    MatSnackBarModule
   ],
   template: `
     <div class="auth-container">
@@ -27,7 +30,7 @@ import { AuthService } from '../../services/auth.service';
         </mat-card-header>
         
         <mat-card-content>
-          <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
+          <form (ngSubmit)="onSubmit(loginForm)" #loginForm="ngForm">
             <mat-form-field appearance="outline">
               <mat-label>Email</mat-label>
               <input matInput 
@@ -35,7 +38,14 @@ import { AuthService } from '../../services/auth.service';
                      name="email" 
                      [(ngModel)]="email" 
                      required 
-                     email>
+                     email
+                     #emailControl="ngModel">
+              <mat-error *ngIf="emailControl.hasError('required') && (emailControl.touched || loginForm.submitted)">
+                Email is required.
+              </mat-error>
+              <mat-error *ngIf="emailControl.hasError('email') && (emailControl.touched || loginForm.submitted)">
+                Enter a valid email address.
+              </mat-error>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -44,18 +54,23 @@ import { AuthService } from '../../services/auth.service';
                      type="password" 
                      name="password" 
                      [(ngModel)]="password" 
-                     required>
+                     required
+                     #passwordControl="ngModel">
+              <mat-error *ngIf="passwordControl.hasError('required') && (passwordControl.touched || loginForm.submitted)">
+                Password is required.
+              </mat-error>
             </mat-form-field>
 
             <div class="button-container">
               <button mat-raised-button 
                       color="primary" 
                       type="submit" 
-                      [disabled]="!loginForm.form.valid">
-                Login
+                      [disabled]="isLoading">
+                {{ isLoading ? 'Logging in...' : 'Login' }}
               </button>
               <button mat-button 
                       type="button" 
+                      [disabled]="isLoading"
                       (click)="goToSignup()">
                 Create Account
               </button>
@@ -100,27 +115,54 @@ import { AuthService } from '../../services/auth.service';
 export class LoginComponent {
   email = '';
   password = '';
+  isLoading = false;
 
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private snackBar: MatSnackBar
   ) {}
 
-  onSubmit() {
-    if (this.email && this.password) {
-      this.authService.login(this.email, this.password).subscribe({
-        next: () => {
-          this.router.navigate(['/']);
-        },
-        error: (error) => {
-          console.error('Login failed:', error);
-          // You might want to show an error message to the user here
-        }
-      });
+  onSubmit(form: NgForm) {
+    if (this.isLoading) return;
+
+    if (form.invalid) {
+      form.form.markAllAsTouched();
+      this.showToast('Please fix the highlighted fields.', 'error-snackbar');
+      return;
     }
+
+    this.isLoading = true;
+    this.authService.login(this.email.trim(), this.password).subscribe({
+      next: () => {
+        this.showToast('Welcome back.', 'success-snackbar');
+        this.router.navigate(['/']);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.isLoading = false;
+        this.showToast(this.getErrorMessage(error), 'error-snackbar');
+      }
+    });
   }
 
   goToSignup() {
     this.router.navigate(['/signup']);
+  }
+
+  private getErrorMessage(error: HttpErrorResponse): string {
+    if (error.status === 0) {
+      return 'Unable to connect to the server. Please check if backend is running.';
+    }
+
+    return error.error?.error || error.error?.message || 'Login failed. Please try again.';
+  }
+
+  private showToast(message: string, panelClass: string): void {
+    this.snackBar.open(message, 'Close', {
+      duration: 4000,
+      horizontalPosition: 'right',
+      verticalPosition: 'top',
+      panelClass
+    });
   }
 }

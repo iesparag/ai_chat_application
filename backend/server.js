@@ -14,6 +14,9 @@ const app = express();
 const server = require('http').createServer(app);
 const allowedOrigins = [
   'http://localhost:4200',  // Local development
+  'http://127.0.0.1:4200',
+  'http://localhost:4300',
+  'http://127.0.0.1:4300',
   'https://ai-chat-app-parag.netlify.app', // Production frontend URL
   'https://ies-parag-gpt.netlify.app'
 ];
@@ -53,12 +56,6 @@ mongoose.connect(process.env.MONGODB_URI, {
 }).then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// OpenAI Configuration
-if (!process.env.OPENAI_API_KEY) {
-  console.error('OpenAI API key is not set in environment variables');
-  process.exit(1);
-}
-
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -67,14 +64,15 @@ const openai = new OpenAI({
 async function testOpenAIConnection() {
   try {
     if (!process.env.OPENAI_API_KEY) {
-      throw new Error('OpenAI API key is not set');
+      console.warn('OpenAI API key is not set. Auth and chat history will work, but AI replies will fail until OPENAI_API_KEY is configured.');
+      return false;
     }
     // if (!process.env.OPENAI_API_KEY.startsWith('sk-') || process.env.OPENAI_API_KEY.startsWith('sk-proj-')) {
     //   throw new Error('Invalid OpenAI API key format. Key should start with "sk-" but not "sk-proj-"');
     // }
     const completion = await openai.chat.completions.create({
       messages: [{ role: "user", content: "Hello!" }],
-      model: "gpt-3.5-turbo",
+      model: "gpt-4.1",
     });
     console.log('OpenAI connection test successful');
     return true;
@@ -101,29 +99,47 @@ testOpenAIConnection();
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { name, email, password } = req.body;
+
+    if (!name?.trim() || !email?.trim() || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
     const user = new User({ name, email, password });
     await user.save();
     
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
-    res.status(201).json({ user, token });
+    res.status(201).json({ user: { id: user._id, name: user.name, email: user.email }, token });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    if (error.code === 11000) {
+      return res.status(409).json({ error: 'An account with this email already exists.' });
+    }
+
+    res.status(400).json({ error: 'Unable to create account. Please check your details and try again.' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    if (!email?.trim() || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
     const user = await User.findOne({ email });
     
     if (!user || !(await user.comparePassword(password))) {
-      throw new Error('Invalid login credentials');
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
     
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
-    res.json({ user, token });
+    res.json({ user: { id: user._id, name: user.name, email: user.email }, token });
   } catch (error) {
-    res.status(401).json({ error: error.message });
+    res.status(500).json({ error: 'Unable to login right now. Please try again.' });
   }
 });
 
@@ -222,7 +238,7 @@ io.on('connection', (socket) => {
         console.log('Sending request to OpenAI...');
         // Get AI response
         const completion = await openai.chat.completions.create({
-          model: 'gpt-3.5-turbo',
+          model: "gpt-4.1",
           messages: [
             ...chat.messages.map(msg => ({
               role: msg.role,
@@ -276,7 +292,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

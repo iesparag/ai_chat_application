@@ -2,25 +2,35 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { SidebarComponent } from './components/sidebar/sidebar.component';
-import { MobileHeaderComponent } from './components/mobile-header/mobile-header.component';
+import { AppBarComponent } from './components/app-bar/app-bar.component';
 import { AuthService } from './services/auth.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, SidebarComponent, MobileHeaderComponent],
+  imports: [CommonModule, RouterOutlet, SidebarComponent, AppBarComponent],
   template: `
-    <div *ngIf="isAuthenticated" class="app-container">
-      <app-mobile-header (toggleSidebar)="toggleSidebar()"></app-mobile-header>
-      <app-sidebar class="sidebar" [class.open]="isSidebarOpen"></app-sidebar>
-      <div class="content-wrapper">
-        <router-outlet></router-outlet>
+    <div *ngIf="isAuthenticated; else authPages" class="app-container">
+      <app-app-bar (toggleMenu)="toggleSidebar()"></app-app-bar>
+
+      <div class="main-area">
+        <app-sidebar class="sidebar" [class.open]="isSidebarOpen"></app-sidebar>
+
+        <div class="content-wrapper">
+          <router-outlet></router-outlet>
+        </div>
+
+        <div
+          class="sidebar-overlay"
+          [class.visible]="isSidebarOpen"
+          (click)="toggleSidebar()"
+        ></div>
       </div>
-      <div class="sidebar-overlay" 
-           [class.visible]="isSidebarOpen" 
-           (click)="toggleSidebar()"></div>
     </div>
-    <router-outlet *ngIf="!isAuthenticated"></router-outlet>
+
+    <ng-template #authPages>
+      <router-outlet></router-outlet>
+    </ng-template>
   `,
   styles: [`
     :host {
@@ -31,10 +41,18 @@ import { AuthService } from './services/auth.service';
 
     .app-container {
       display: flex;
+      flex-direction: column;
       height: 100vh;
       overflow: hidden;
       position: relative;
       background-color: #343541;
+    }
+
+    .main-area {
+      display: flex;
+      min-height: 0;
+      flex: 1;
+      position: relative;
     }
 
     .sidebar {

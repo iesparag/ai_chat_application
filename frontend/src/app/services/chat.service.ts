@@ -146,9 +146,22 @@ export class ChatService {
   }
 
   sendMessage(content: string) {
-    if (!content.trim() || !this.currentChatSubject.value) return;
+    const trimmedContent = content.trim();
+    if (!trimmedContent) return;
 
     const currentChat = this.currentChatSubject.value;
+    if (!currentChat) {
+      this.createChat('New Chat').subscribe({
+        next: (chat) => this.sendMessageToChat(chat, trimmedContent),
+        error: (error) => console.error('Error creating chat:', error)
+      });
+      return;
+    }
+
+    this.sendMessageToChat(currentChat, trimmedContent);
+  }
+
+  private sendMessageToChat(currentChat: Chat, content: string) {
     const timestamp = new Date();
     
     // Add user message first
