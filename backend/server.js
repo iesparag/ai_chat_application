@@ -2,9 +2,10 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const OpenAI = require('openai');
+
+mongoose.set('bufferCommands', false);
 
 const User = require('./models/user');
 const Chat = require('./models/chat');
@@ -39,22 +40,94 @@ app.use(cors({
 
 app.use(express.json());
 
+const redactSensitiveFields = (value) => {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, fieldValue]) => [
+      key,
+      ['password', 'token', 'authorization'].includes(key.toLowerCase()) ? '[redacted]' : fieldValue
+    ])
+  );
+};
+
 // Request logging middleware
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url}`);
-  console.log('Request Headers:', req.headers);
+  console.log('Request Headers:', redactSensitiveFields(req.headers));
   if (req.body && Object.keys(req.body).length > 0) {
-    console.log('Request Body:', req.body);
+    console.log('Request Body:', redactSensitiveFields(req.body));
   }
   next();
 });
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+let mongoRetryTimer = null;
+
+async function connectToMongoDB() {
+  if (mongoose.connection.readyState === 1 || mongoose.connection.readyState === 2) {
+    return;
+  }
+
+  if (!process.env.MONGODB_URI) {
+    console.error('MONGODB_URI is not configured. Auth and chat APIs will return 503 until it is set.');
+    return;
+  }
+
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+      socketTimeoutMS: 20000,
+      maxPoolSize: 10
+    });
+    console.log('Connected to MongoDB');
+  } catch (err) {
+    console.error('MongoDB connection error:', err.message);
+    if (!mongoRetryTimer) {
+      mongoRetryTimer = setTimeout(() => {
+        mongoRetryTimer = null;
+        connectToMongoDB();
+      }, 10000);
+    }
+  }
+}
+
+connectToMongoDB();
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('MongoDB disconnected');
+});
+
+mongoose.connection.on('reconnected', () => {
+  console.log('MongoDB reconnected');
+});
+
+const isDatabaseReady = () => mongoose.connection.readyState === 1;
+
+const requireDatabase = (req, res, next) => {
+  if (!isDatabaseReady()) {
+    return res.status(503).json({ error: 'Database is starting up. Please try again in a moment.' });
+  }
+
+  next();
+};
+
+const withTimeout = (promise, ms, message = 'Request timed out') => {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(message);
+      error.code = 'REQUEST_TIMEOUT';
+      reject(error);
+    }, ms);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+};
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -96,11 +169,12 @@ async function testOpenAIConnection() {
 testOpenAIConnection();
 
 // Authentication Routes
-app.post('/api/auth/signup', async (req, res) => {
+app.post('/api/auth/signup', requireDatabase, async (req, res) => {
   try {
     const { name, email, password } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
 
-    if (!name?.trim() || !email?.trim() || !password) {
+    if (!name?.trim() || !normalizedEmail || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required.' });
     }
 
@@ -108,37 +182,58 @@ app.post('/api/auth/signup', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters.' });
     }
 
-    const user = new User({ name, email, password });
-    await user.save();
+    const user = new User({ name: name.trim(), email: normalizedEmail, password });
+    await withTimeout(user.save(), 10000, 'Signup database request timed out');
     
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
     res.status(201).json({ user: { id: user._id, name: user.name, email: user.email }, token });
   } catch (error) {
+    console.error('Signup error:', error.message);
+
     if (error.code === 11000) {
       return res.status(409).json({ error: 'An account with this email already exists.' });
+    }
+
+    if (error.code === 'REQUEST_TIMEOUT') {
+      return res.status(504).json({ error: 'Signup is taking too long. Please try again.' });
     }
 
     res.status(400).json({ error: 'Unable to create account. Please check your details and try again.' });
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', requireDatabase, async (req, res) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = email?.trim().toLowerCase();
 
-    if (!email?.trim() || !password) {
+    if (!normalizedEmail || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await withTimeout(
+      User.findOne({ email: normalizedEmail }).select('+password').maxTimeMS(8000).exec(),
+      10000,
+      'Login database request timed out'
+    );
     
-    if (!user || !(await user.comparePassword(password))) {
+    const passwordMatches = user
+      ? await withTimeout(user.comparePassword(password), 6000, 'Password check timed out')
+      : false;
+
+    if (!user || !passwordMatches) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
     
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
     res.json({ user: { id: user._id, name: user.name, email: user.email }, token });
   } catch (error) {
+    console.error('Login error:', error.message);
+
+    if (error.code === 'REQUEST_TIMEOUT') {
+      return res.status(504).json({ error: 'Login is taking too long. Please try again.' });
+    }
+
     res.status(500).json({ error: 'Unable to login right now. Please try again.' });
   }
 });

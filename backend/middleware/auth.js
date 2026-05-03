@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/user');
 
 const auth = async (req, res, next) => {
@@ -8,8 +9,12 @@ const auth = async (req, res, next) => {
   }
 
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).send({ error: 'Database is starting up. Please try again in a moment.' });
+    }
+
     const token = req.header('Authorization')?.replace('Bearer ', '');
-    console.log('Received token:', token);
+    console.log('Received token:', token ? '[redacted]' : null);
 
     if (!token) {
       console.log('No token provided');
@@ -19,7 +24,7 @@ const auth = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     console.log('Decoded token:', decoded);
 
-    const user = await User.findOne({ _id: decoded.userId });
+    const user = await User.findById(decoded.userId).maxTimeMS(8000).exec();
     if (!user) {
       console.log('User not found for id:', decoded.userId);
       throw new Error('User not found');

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { tap, timeout } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 
@@ -21,6 +21,7 @@ interface AuthResponse {
 })
 export class AuthService {
   private readonly API_URL = environment.apiUrl;
+  private readonly AUTH_TIMEOUT_MS = 12000;
   private tokenSubject = new BehaviorSubject<string | null>(localStorage.getItem('token'));
   private authSubject = new BehaviorSubject<boolean>(!!localStorage.getItem('token'));
   private userSubject = new BehaviorSubject<AuthUser | null>(this.getStoredUser());
@@ -38,12 +39,14 @@ export class AuthService {
 
   signup(name: string, email: string, password: string): Observable<AuthResponse> {
     return this.http.post<AuthResponse>(`${this.API_URL}/auth/signup`, { name, email, password }).pipe(
+      timeout(this.AUTH_TIMEOUT_MS),
       tap(response => this.setSession(response))
     );
   }
 
   login(email: string, password: string): Observable<AuthResponse> {
     return this.http.post<AuthResponse>(`${this.API_URL}/auth/login`, { email, password }).pipe(
+      timeout(this.AUTH_TIMEOUT_MS),
       tap(response => this.setSession(response))
     );
   }
