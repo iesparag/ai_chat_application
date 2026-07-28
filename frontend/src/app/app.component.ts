@@ -36,7 +36,7 @@ import { AuthService } from './services/auth.service';
     :host {
       display: block;
       height: 100%;
-      background-color: #343541;
+      background-color: var(--bg);
     }
 
     .app-container {
@@ -45,7 +45,7 @@ import { AuthService } from './services/auth.service';
       height: 100vh;
       overflow: hidden;
       position: relative;
-      background-color: #343541;
+      background-color: var(--bg);
     }
 
     .main-area {
@@ -59,7 +59,7 @@ import { AuthService } from './services/auth.service';
       width: 260px;
       height: 100%;
       flex-shrink: 0;
-      background-color: #202123;
+      background-color: var(--bg-sidebar);
       border-right: 1px solid rgba(255,255,255,0.1);
       z-index: 1000;
       transition: transform 0.3s ease;
@@ -72,7 +72,7 @@ import { AuthService } from './services/auth.service';
       display: flex;
       flex-direction: column;
       position: relative;
-      background-color: #343541;
+      background-color: var(--bg);
     }
 
     .sidebar-overlay {

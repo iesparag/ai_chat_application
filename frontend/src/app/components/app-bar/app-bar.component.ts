@@ -40,7 +40,7 @@ import { Observable } from 'rxjs';
   `,
   styles: [`
     .app-bar {
-      background-color: #202123 !important;
+      background-color: var(--bg-sidebar) !important;
       color: #ECECF1;
       border-bottom: 1px solid rgba(255, 255, 255, 0.15);
       padding: 0 1rem;
@@ -75,7 +75,7 @@ import { Observable } from 'rxjs';
       font-size: 20px;
       width: 20px;
       height: 20px;
-      color: #10a37f;
+      color: var(--accent);
     }
 
     .user-name {

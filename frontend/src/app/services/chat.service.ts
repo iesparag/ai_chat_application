@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, Subject } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { AuthService } from './auth.service';
@@ -21,6 +21,11 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+export interface AppNotification {
+  type: 'success' | 'error' | 'info';
+  message: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -29,6 +34,8 @@ export class ChatService {
   private apiUrl = environment.apiUrl;
   private currentChatSubject = new BehaviorSubject<Chat | null>(null);
   private chatsSubject = new BehaviorSubject<Chat[]>([]);
+  private typingSubject = new BehaviorSubject<boolean>(false);
+  private notificationSubject = new Subject<AppNotification>();
 
   constructor(
     private http: HttpClient,
@@ -55,6 +62,11 @@ export class ChatService {
       const textContent = typeof message?.content === 'string' ? message.content : '';
       const role = message?.role === 'user' || message?.role === 'assistant' ? message.role : 'assistant';
 
+      // AI has responded — stop the "thinking" indicator
+      if (role === 'assistant') {
+        this.typingSubject.next(false);
+      }
+
       // Only update if it's the current chat and message doesn't exist
       if (currentChat._id === chatId && textContent &&
           !currentChat.messages?.some(m => 
@@ -72,7 +84,25 @@ export class ChatService {
     // Handle socket errors
     this.socket.on('error', (error) => {
       console.error('Socket error:', error);
+      this.typingSubject.next(false);
+      this.notificationSubject.next({
+        type: 'error',
+        message: error?.message || 'Something went wrong. Please try again.'
+      });
     });
+
+    // Surface connection drops so the user knows why replies stall
+    this.socket.on('disconnect', () => this.typingSubject.next(false));
+  }
+
+  /** Emits true while waiting for the AI to respond. */
+  isTyping(): Observable<boolean> {
+    return this.typingSubject.asObservable();
+  }
+
+  /** Emits toast-worthy notifications (errors, status). */
+  getNotifications(): Observable<AppNotification> {
+    return this.notificationSubject.asObservable();
   }
 
   private setupSocketAuthentication() {
@@ -141,6 +171,7 @@ export class ChatService {
         if (currentChat?._id === chatId) {
           this.currentChatSubject.next(updatedChats[0] || null);
         }
+        this.notificationSubject.next({ type: 'success', message: 'Chat deleted' });
       })
     );
   }
@@ -167,7 +198,7 @@ export class ChatService {
     // Add user message first
     this.updateChatWithMessage(currentChat._id, content, 'user', timestamp);
     
-    // Then emit to socket
+    // Then emit to socket and show the "thinking" indicator
     this.socket.emit('message', {
       chatId: currentChat._id,
       message: {
@@ -175,6 +206,7 @@ export class ChatService {
         timestamp
       }
     });
+    this.typingSubject.next(true);
   }
 
   private updateChatWithMessage(chatId: string, content: string, role: 'user' | 'assistant', timestamp: Date = new Date()) {

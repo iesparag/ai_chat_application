@@ -62,7 +62,7 @@ import { Observable } from 'rxjs';
     :host {
       display: block;
       height: 100%;
-      background-color: #202123;
+      background-color: var(--bg-sidebar);
       color: white;
     }
 
@@ -136,12 +136,12 @@ import { Observable } from 'rxjs';
     }
 
     .chat-item:hover {
-      background-color: #2A2B32;
+      background-color: var(--bg-hover);
       border-color: #565869;
     }
 
     .chat-item.active {
-      background-color: #343541;
+      background-color: var(--bg-elevated);
       border-color: #565869;
     }
 
