@@ -21,6 +21,7 @@ const allowedOrigins = [
   'https://ai-chat-app-parag.netlify.app', // Production frontend URL
   'https://ies-parag-gpt.netlify.app',
   'https://ai-chat-application-sigma-sand.vercel.app', // Vercel production
+  'https://ai-chat-application-by-parag.vercel.app',
   /^https:\/\/ai-chat-application-sigma-sand.*\.vercel\.app$/ // Vercel preview deploys
 ];
 
