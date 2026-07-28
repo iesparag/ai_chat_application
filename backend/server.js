@@ -19,7 +19,9 @@ const allowedOrigins = [
   'http://localhost:4300',
   'http://127.0.0.1:4300',
   'https://ai-chat-app-parag.netlify.app', // Production frontend URL
-  'https://ies-parag-gpt.netlify.app'
+  'https://ies-parag-gpt.netlify.app',
+  'https://ai-chat-application-sigma-sand.vercel.app', // Vercel production
+  /^https:\/\/ai-chat-application-sigma-sand.*\.vercel\.app$/ // Vercel preview deploys
 ];
 
 const io = require('socket.io')(server, {
