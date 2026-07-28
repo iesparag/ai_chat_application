@@ -135,6 +135,37 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// Model can be swapped via env (e.g. gpt-4o-mini) without a code change.
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1';
+
+// System prompt — makes the assistant behave like ChatGPT and format in Markdown
+// so the frontend's markdown renderer shows headings, lists, tables and code blocks.
+const SYSTEM_PROMPT = `You are a helpful, friendly AI assistant, similar to ChatGPT.
+- Give clear, accurate and well-structured answers.
+- Format responses in Markdown: use headings, **bold**, bullet/numbered lists and tables where helpful.
+- Always wrap code in fenced code blocks with the correct language tag (e.g. \`\`\`js).
+- Be concise but complete. Ask a clarifying question when the request is ambiguous.
+- Use the earlier messages in this conversation as context and stay consistent with them.`;
+
+// How many recent messages to send as context (keeps memory without blowing token limits).
+const MAX_CONTEXT_MESSAGES = 20;
+
+// Turn an OpenAI error into a clear, user-facing message.
+function describeOpenAIError(error) {
+  const status = error?.status || error?.response?.status;
+  const code = error?.code || error?.error?.code;
+  if (status === 401 || code === 'invalid_api_key') {
+    return 'AI is not configured correctly (invalid API key). Please contact the admin.';
+  }
+  if (status === 429 || code === 'insufficient_quota') {
+    return 'AI usage limit reached — please add credits to the OpenAI account and try again.';
+  }
+  if (status === 404 || code === 'model_not_found') {
+    return 'The configured AI model is not available for this account.';
+  }
+  return 'Failed to get AI response. Please try again in a moment.';
+}
+
 // Test OpenAI connection
 async function testOpenAIConnection() {
   try {
@@ -147,7 +178,7 @@ async function testOpenAIConnection() {
     // }
     const completion = await openai.chat.completions.create({
       messages: [{ role: "user", content: "Hello!" }],
-      model: "gpt-4.1",
+      model: OPENAI_MODEL,
     });
     console.log('OpenAI connection test successful');
     return true;
@@ -333,17 +364,19 @@ io.on('connection', (socket) => {
 
       try {
         console.log('Sending request to OpenAI...');
-        // Get AI response
+        // Send system prompt + recent conversation history (memory) to the model
+        const history = chat.messages
+          .slice(-MAX_CONTEXT_MESSAGES)
+          .map(msg => ({ role: msg.role, content: msg.content }));
+
         const completion = await openai.chat.completions.create({
-          model: "gpt-4.1",
+          model: OPENAI_MODEL,
           messages: [
-            ...chat.messages.map(msg => ({
-              role: msg.role,
-              content: msg.content
-            })),
+            { role: 'system', content: SYSTEM_PROMPT },
+            ...history,
           ],
           temperature: 0.7,
-          max_tokens: 1000,
+          max_tokens: 1500,
         });
 
         if (!completion.choices || !completion.choices[0]) {
@@ -376,7 +409,7 @@ io.on('connection', (socket) => {
         });
       } catch (error) {
         console.error('OpenAI API Error:', error);
-        socket.emit('error', { message: 'Failed to get AI response. Please check your API key.' });
+        socket.emit('error', { message: describeOpenAIError(error) });
       }
     } catch (error) {
       console.error('Error:', error);
